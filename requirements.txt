@@ -1,0 +1,16 @@
+# Core ML & Data Science
+pandas
+numpy
+scikit-learn
+scipy
+
+# Visualization
+matplotlib
+seaborn
+
+# App Deployment
+streamlit
+
+# Jupyter / Notebook support
+notebook
+ipykernel
