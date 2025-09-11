@@ -3,8 +3,8 @@ from models.kmeans_model import tune_kmeans
 import pandas as pd
 import joblib
 from sklearn.cluster import KMeans
-
-# Step 1: Load data
+#adi was here
+# Step 1: Load data 
 df = load_data("data/spotify_tracks_clean.csv")
 
 # Step 2: Preprocess with PCA
