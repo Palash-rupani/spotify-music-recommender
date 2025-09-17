@@ -1,10 +1,11 @@
 from sklearn.cluster import AgglomerativeClustering
 from utils.evaluation import evaluate_model
+from tqdm import tqdm
 import numpy as np
 
 def tune_agglomerative(X, cluster_range=(2, 10), sample_size=10000, random_state=42):
     """
-    Tune Agglomerative Clustering over a range of cluster numbers and linkage methods.
+    Tune Agglomerative Clustering over a range of cluster numbers and linkage methods, with progress bar.
     """
     # Downsample if dataset too large
     if len(X) > sample_size:
@@ -17,7 +18,9 @@ def tune_agglomerative(X, cluster_range=(2, 10), sample_size=10000, random_state
     results = []
     linkages = ["ward", "complete", "average", "single"]
 
-    for k in range(cluster_range[0], cluster_range[1] + 1):
+    total = (cluster_range[1] - cluster_range[0] + 1) * len(linkages)
+
+    for k in tqdm(range(cluster_range[0], cluster_range[1] + 1), desc="Agglomerative Tuning"):
         for link in linkages:
             try:
                 # ward only works with Euclidean
