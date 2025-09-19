@@ -1,97 +1,119 @@
 import os
 import pandas as pd
 import joblib
-import numpy as np
-from sklearn.cluster import KMeans, AgglomerativeClustering
+from sklearn.cluster import KMeans, DBSCAN
+
+# =============================
+# Imports from utils & models
+# =============================
 from utils.preprocessing import load_data, preprocess_data
-from models.kmeans_model import tune_kmeans
-from models.agglomerative_model import tune_agglomerative
+from models.kmeans_model import search_feature_subsets
+from models.dbscan_model import smart_tune_dbscan
+from models.agglomerative_model import tune_agglomerative, smart_tune_agglomerative
 
-# =============================
-# Setup folders
-# =============================
-folders = [
-    "saved_models/kmeans",
-    "saved_models/agglomerative",
-    "results/kmeans",
-    "results/agglomerative",
-    "reports/kmeans",
-    "reports/agglomerative",
-]
-for f in folders:
-    os.makedirs(f, exist_ok=True)
 
-# =============================
-# Load Data
-# =============================
-df = load_data("data/spotify_tracks_clean.csv")
+if __name__ == "__main__":
+    # =============================
+    # Setup folders
+    # =============================
+    folders = [
+        "saved_models/kmeans",
+        "saved_models/dbscan",
+        "saved_models/agglomerative",
+        "results/kmeans",
+        "results/dbscan",
+        "results/agglomerative",
+        "reports/kmeans",
+        "reports/dbscan",
+        "reports/agglomerative",
+    ]
+    for f in folders:
+        os.makedirs(f, exist_ok=True)
 
-# =============================
-# Preprocess with PCA
-# =============================
-features = [
-    "danceability","energy","loudness","speechiness","acousticness",
-    "instrumentalness","liveness","valence","tempo","duration_ms"
-]
-X, scaler, pca = preprocess_data(df, features, use_pca=True, variance_threshold=0.9)
-print("X shape after PCA:", X.shape)
+    # =============================
+    # Load Data
+    # =============================
+    df = load_data("data/spotify_tracks_clean.csv")
 
-# =============================
-# Step 1: Tune KMeans on a sample
-# =============================
-sample_size = 10000  # representative subset
-print("\n=== Running KMeans Tuning on sample ===")
-results_kmeans = tune_kmeans(X, cluster_range=(3, 20), sample_size=sample_size)
-df_kmeans = pd.DataFrame(results_kmeans)
-df_kmeans.to_csv("results/kmeans/results_kmeans.csv", index=False)
+    # =============================
+    # Define features
+    # =============================
+    features = [
+        "danceability","energy","loudness","speechiness","acousticness",
+        "instrumentalness","liveness","valence","tempo","duration_ms"
+    ]
 
-# Show top 5 models
-print("\n--- Top 5 KMeans Models ---")
-print(df_kmeans.sort_values("silhouette", ascending=False).head(5))
+    sample_size = 10000
 
-# Pick best model
-best_kmeans = df_kmeans.loc[df_kmeans["silhouette"].idxmax()]
-best_params = best_kmeans["params"]
-print(f"\nBest KMeans model (sample): {best_params}, silhouette={best_kmeans['silhouette']:.4f}")
+    # =============================
+    # Step 0: Feature Subset Selection for KMeans
+    # =============================
+    best_features, best_score, best_scaler, best_pca, best_X_sample, best_kmeans_model_params, subset_results = search_feature_subsets(
+        df, features, preprocess_data, sample_size=sample_size, n_subsets=30, cluster_range=(5, 10)
+    )
 
-# =============================
-# Step 2: Train final KMeans on full dataset
-# =============================
-final_kmeans = KMeans(
-    n_clusters=best_params["n_clusters"],
-    n_init=10,
-    max_iter=300,
-    random_state=42,
-    init='k-means++'
-)
-final_kmeans.fit(X)
+    print(f"\n✅ Best Feature Subset: {best_features}")
+    print(f"Silhouette Score on sample: {best_score:.4f}")
 
-# Save model, scaler, PCA
-joblib.dump(final_kmeans, "saved_models/kmeans/kmeans_best_model.joblib")
-joblib.dump(scaler, "saved_models/kmeans/scaler.joblib")
-joblib.dump(pca, "saved_models/kmeans/pca.joblib")
-print("✅ Saved best KMeans model on full dataset\n")
+    # =============================
+    # Step 1: KMeans training on sample
+    # =============================
+    print("\n=== Training KMeans on sample with best features ===")
+    final_kmeans = KMeans(
+        n_clusters=best_kmeans_model_params['n_clusters'],
+        n_init=10,
+        max_iter=300,
+        random_state=42,
+        init='k-means++'
+    )
+    final_kmeans.fit(best_X_sample)
 
-# =============================
-# Step 3: Agglomerative Clustering on sample (scalable)
-# =============================
-print("\n=== Running Agglomerative Clustering Tuning on sample ===")
-results_agglom = tune_agglomerative(X, cluster_range=(3, 20), sample_size=sample_size)
-df_agglom = pd.DataFrame(results_agglom)
-df_agglom.to_csv("results/agglomerative/results_agglomerative.csv", index=False)
+    # Save KMeans model, scaler, PCA
+    joblib.dump(final_kmeans, "saved_models/kmeans/kmeans_best_model_sample_features.joblib")
+    joblib.dump(best_scaler, "saved_models/kmeans/scaler_sample_features.joblib")
+    joblib.dump(best_pca, "saved_models/kmeans/pca_sample_features.joblib")
+    print("✅ Saved best KMeans model (sample-only, best features)\n")
 
-# Pick best Agglomerative model
-best_agglom = df_agglom.loc[df_agglom["silhouette"].idxmax()]
-best_params = best_agglom["params"]
-print(f"\nBest Agglomerative model (sample): {best_params}, silhouette={best_agglom['silhouette']:.4f}")
+    # =============================
+    # Step 2: Smart DBSCAN tuning & training
+    # =============================
+    print("\n=== Running Smart DBSCAN Tuning on sample ===")
+    results_dbscan = smart_tune_dbscan(best_X_sample, n_trials=50, sample_size=sample_size)
+    df_dbscan = pd.DataFrame(results_dbscan)
+    df_dbscan.to_csv("results/dbscan/results_dbscan_smart.csv", index=False)
 
-# Train Agglomerative on sample
-X_agglom = X[np.random.RandomState(42).choice(len(X), sample_size, replace=False)] \
-    if len(X) > sample_size else X
+    df_valid = df_dbscan.dropna(subset=["silhouette"])
+    if not df_valid.empty:
+        best_dbscan = df_valid.loc[df_valid["silhouette"].idxmax()]
+        print(f"\nBest DBSCAN model (sample): {best_dbscan['params']}, silhouette={best_dbscan['silhouette']:.4f}")
 
-final_agglom = AgglomerativeClustering(**best_params)
-final_agglom.fit(X_agglom)
-joblib.dump(final_agglom, "saved_models/agglomerative/agglomerative_best_model.joblib")
-print("✅ Saved best Agglomerative model (on sample)\n")
+        final_dbscan = DBSCAN(**best_dbscan['params'])
+        final_dbscan.fit(best_X_sample)
 
-print("🎉 All models trained and saved successfully!")
+        joblib.dump(final_dbscan, "saved_models/dbscan/dbscan_best_model_sample.joblib")
+        joblib.dump(best_scaler, "saved_models/dbscan/scaler_sample_features.joblib")
+        joblib.dump(best_pca, "saved_models/dbscan/pca_sample_features.joblib")
+        print("✅ Saved best DBSCAN model (sample-only, best features)\n")
+    else:
+        print("⚠️ No valid DBSCAN clustering found (all noise or single cluster).")
+
+    # =============================
+    # Step 3: Agglomerative Clustering
+    # =============================
+    print("\n=== Running Agglomerative Clustering (Grid Search) on sample ===")
+    results_agglom_grid = tune_agglomerative(best_X_sample, cluster_range=(3, 20), sample_size=sample_size)
+    df_agglom_grid = pd.DataFrame(results_agglom_grid)
+    df_agglom_grid.to_csv("results/agglomerative/results_agglomerative_grid.csv", index=False)
+
+    best_agglom_grid = df_agglom_grid.loc[df_agglom_grid["silhouette"].idxmax()]
+    print(f"\nBest Agglomerative Grid model: {best_agglom_grid['params']}, silhouette={best_agglom_grid['silhouette']:.4f}")
+
+    print("\n=== Running Agglomerative Clustering (Smart Search) on sample ===")
+    results_agglom_smart = smart_tune_agglomerative(best_X_sample, cluster_range=(3, 20), n_trials=30, sample_size=sample_size)
+    df_agglom_smart = pd.DataFrame(results_agglom_smart)
+    df_agglom_smart.to_csv("results/agglomerative/results_agglomerative_smart.csv", index=False)
+
+    best_agglom_smart = df_agglom_smart.loc[df_agglom_smart["silhouette"].idxmax()]
+    print(f"\nBest Agglomerative Smart model: {best_agglom_smart['params']}, silhouette={best_agglom_smart['silhouette']:.4f}")
+   
+    print("🎉 All clustering done on sample-only dataset with feature optimization!")
