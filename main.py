@@ -9,7 +9,7 @@ from sklearn.cluster import KMeans, DBSCAN
 from utils.preprocessing import load_data, preprocess_data
 from models.kmeans_model import search_feature_subsets
 from models.dbscan_model import smart_tune_dbscan
-from models.agglomerative_model import tune_agglomerative, smart_tune_agglomerative
+from models.agglomerative_model import tune_agglomerative
 
 
 if __name__ == "__main__":
@@ -98,22 +98,14 @@ if __name__ == "__main__":
         print("⚠️ No valid DBSCAN clustering found (all noise or single cluster).")
 
     # =============================
-    # Step 3: Agglomerative Clustering
+    # Step 3: Agglomerative Clustering (Grid Search ONLY)
     # =============================
     print("\n=== Running Agglomerative Clustering (Grid Search) on sample ===")
-    results_agglom_grid = tune_agglomerative(best_X_sample, cluster_range=(3, 20), sample_size=sample_size)
+    results_agglom_grid = tune_agglomerative(best_X_sample, cluster_range=(3, 10), sample_size=sample_size)
     df_agglom_grid = pd.DataFrame(results_agglom_grid)
     df_agglom_grid.to_csv("results/agglomerative/results_agglomerative_grid.csv", index=False)
 
     best_agglom_grid = df_agglom_grid.loc[df_agglom_grid["silhouette"].idxmax()]
     print(f"\nBest Agglomerative Grid model: {best_agglom_grid['params']}, silhouette={best_agglom_grid['silhouette']:.4f}")
 
-    print("\n=== Running Agglomerative Clustering (Smart Search) on sample ===")
-    results_agglom_smart = smart_tune_agglomerative(best_X_sample, cluster_range=(3, 20), n_trials=30, sample_size=sample_size)
-    df_agglom_smart = pd.DataFrame(results_agglom_smart)
-    df_agglom_smart.to_csv("results/agglomerative/results_agglomerative_smart.csv", index=False)
-
-    best_agglom_smart = df_agglom_smart.loc[df_agglom_smart["silhouette"].idxmax()]
-    print(f"\nBest Agglomerative Smart model: {best_agglom_smart['params']}, silhouette={best_agglom_smart['silhouette']:.4f}")
-   
     print("🎉 All clustering done on sample-only dataset with feature optimization!")
