@@ -7,3 +7,7 @@ data/
 saved_models/
 results/
 *.joblib
+
+
+# Ignore environment variables
+.env
