@@ -2,3 +2,8 @@
 .venv/
 
 data/
+
+
+saved_models/
+results/
+*.joblib
