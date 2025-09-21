@@ -1,61 +1,90 @@
 from flask import Flask, render_template, request, jsonify
 import joblib
+import os
 import pandas as pd
-import numpy as np
+import spotipy
+from spotipy.oauth2 import SpotifyClientCredentials
+from dotenv import load_dotenv
+from sklearn.neighbors import NearestNeighbors
 
-# =============================
-# Load models + preprocessors
-# =============================
-scaler = joblib.load("saved_models/kmeans/scaler_sample_features.joblib")
-pca = joblib.load("saved_models/kmeans/pca_sample_features.joblib")
-kmeans = joblib.load("saved_models/kmeans/kmeans_best_model_sample_features.joblib")
+# Load env vars
+load_dotenv()
+CLIENT_ID = os.getenv("SPOTIPY_CLIENT_ID")
+CLIENT_SECRET = os.getenv("SPOTIPY_CLIENT_SECRET")
 
-# Load dataset
-df = pd.read_csv("data/spotify_tracks_clean.csv")
+# Spotify API auth
+sp = spotipy.Spotify(auth_manager=SpotifyClientCredentials(
+    client_id=CLIENT_ID,
+    client_secret=CLIENT_SECRET
+))
 
-# Feature columns
-features = [
-    "danceability","energy","loudness","speechiness","acousticness",
-    "instrumentalness","liveness","valence","tempo","duration_ms"
-]
-
+# Flask app
 app = Flask(__name__)
 
-# =============================
-# Routes
-# =============================
+# Load models + data
+model = joblib.load("saved_models/spectral/spectral_best_model_sample.joblib")
+scaler = joblib.load("saved_models/spectral/scaler_sample_features.joblib")
+tracks_df = pd.read_csv("data/tracks_with_clusters.csv")  # your dataset with features, clusters, etc.
+
+# Pre-fit NearestNeighbors on full dataset
+nn = NearestNeighbors(n_neighbors=10, metric="euclidean")
+nn.fit(scaler.transform(tracks_df[["danceability", "energy", "valence"]]))
 
 @app.route("/")
-def home():
+def index():
     return render_template("index.html")
 
 @app.route("/recommend", methods=["POST"])
 def recommend():
-    data = request.get_json()
-    song_name = data.get("song_id")
+    data = request.json
+    track_id = data.get("track_id")
+    rec_type = data.get("recType", "cluster")
 
-    # Find the song in dataset
-    song = df[df["track_name"].str.lower() == song_name.lower()]
-    if song.empty:
-        return jsonify([])
+    # Get features from Spotify
+    features = sp.audio_features([track_id])[0]
+    if not features:
+        return jsonify({"error": "Track not found"}), 404
 
-    # Preprocess the song
-    X = scaler.transform(song[features])
-    X_pca = pca.transform(X)
+    # Extract features used in training
+    X = [[features["danceability"], features["energy"], features["valence"]]]
+    X_scaled = scaler.transform(X)
 
-    # Predict cluster
-    cluster = kmeans.predict(X_pca)[0]
+    recommendations = []
 
-    # Recommend other songs from the same cluster
-    cluster_songs = df[kmeans.predict(pca.transform(scaler.transform(df[features]))) == cluster]
+    if rec_type == "cluster":
+        # Predict cluster
+        cluster = model.predict(X_scaled)[0]
+        recs = tracks_df[tracks_df["cluster"] == cluster].sample(10)
 
-    # Exclude the original song
-    cluster_songs = cluster_songs[cluster_songs["track_name"].str.lower() != song_name.lower()]
+    elif rec_type == "nn":
+        # Use kNN across all tracks
+        indices = nn.kneighbors(X_scaled, return_distance=False)[0]
+        recs = tracks_df.iloc[indices]
 
-    # Pick top 5
-    recs = cluster_songs.sample(5, random_state=42)[["track_name", "artists"]].to_dict(orient="records")
+    elif rec_type == "combined":
+        # Cluster first
+        cluster = model.predict(X_scaled)[0]
+        cluster_tracks = tracks_df[tracks_df["cluster"] == cluster]
+        nn_cluster = NearestNeighbors(n_neighbors=10).fit(
+            scaler.transform(cluster_tracks[["danceability", "energy", "valence"]])
+        )
+        indices = nn_cluster.kneighbors(X_scaled, return_distance=False)[0]
+        recs = cluster_tracks.iloc[indices]
 
-    return jsonify(recs)
+    else:
+        return jsonify({"error": "Invalid recType"}), 400
+
+    # Format results
+    for _, row in recs.iterrows():
+        recommendations.append({
+            "id": row["track_id"],
+            "name": row["track_name"],
+            "artist": row["artist_name"],
+            "preview_url": row.get("preview_url", None),
+            "album_art": row.get("album_art", None)
+        })
+
+    return jsonify({"recommendations": recommendations})
 
 if __name__ == "__main__":
     app.run(debug=True)
