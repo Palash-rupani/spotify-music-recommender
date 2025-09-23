@@ -1,8 +1,8 @@
 # main.py
-
 import os
 import pandas as pd
 import joblib
+import json
 from sklearn.cluster import KMeans, DBSCAN, AgglomerativeClustering, SpectralClustering
 from sklearn.mixture import GaussianMixture
 from sklearn.ensemble import RandomForestClassifier
@@ -17,7 +17,6 @@ from models.dbscan_model import smart_tune_dbscan
 from models.agglomerative_model import tune_agglomerative
 from models.gmm_model import tune_gmm
 from models.spectral_model import tune_spectral
-
 
 if __name__ == "__main__":
     # =============================
@@ -52,7 +51,7 @@ if __name__ == "__main__":
     df = load_data("data/spotify_tracks_clean.csv")
 
     # =============================
-    # Define features
+    # Define all candidate features
     # =============================
     features = [
         "danceability","energy","loudness","speechiness","acousticness",
@@ -70,6 +69,12 @@ if __name__ == "__main__":
     )
     print(f"\n✅ Best Feature Subset: {best_features}")
     print(f"Silhouette Score on sample: {best_score:.4f}")
+
+    # Save best_features for recommendation pipeline
+    # Save best_features for recommendation pipeline
+    best_features_list = best_features.tolist()  # convert ndarray -> list
+    with open("saved_models/kmeans/best_features.json", "w") as f:
+        json.dump(best_features_list, f)
 
     # =============================
     # Step 1: KMeans
@@ -112,7 +117,6 @@ if __name__ == "__main__":
         print(f"DBSCAN silhouette score: {sil_dbscan:.4f}")
 
         joblib.dump(final_dbscan, "saved_models/dbscan/dbscan_best_model_sample.joblib")
-        # Save clustered dataset
         df_sample_dbscan = df.sample(n=len(best_X_sample), random_state=42).copy()
         df_sample_dbscan["cluster_dbscan"] = final_dbscan.labels_
         df_sample_dbscan.to_csv("clustered_datasets_old/spotify_dbscan_sample.csv", index=False)
@@ -188,16 +192,14 @@ if __name__ == "__main__":
         print(f"Spectral silhouette score: {sil_spectral:.4f}")
         joblib.dump(final_spectral, "saved_models/spectral/spectral_best_model_sample.joblib")
 
-        # =============================
         # Train classifier to mimic Spectral
-        # =============================
         clf_spectral = RandomForestClassifier(n_estimators=200, random_state=42)
         clf_spectral.fit(best_X_sample, final_spectral.labels_)
         joblib.dump(clf_spectral, "saved_models/spectral_classifier/spectral_classifier.joblib")
         joblib.dump(best_scaler, "saved_models/spectral_classifier/scaler_sample_features.joblib")
         joblib.dump(best_pca, "saved_models/spectral_classifier/pca_sample_features.joblib")
 
-        # Save sample dataset with Spectral clusters
+        # Save dataset with Spectral clusters
         df_sample_spectral = df.sample(n=len(best_X_sample), random_state=42).copy()
         df_sample_spectral["cluster_spectral"] = final_spectral.labels_
         df_sample_spectral.to_csv("clustered_datasets_new/spotify_spectral_sample.csv", index=False)
