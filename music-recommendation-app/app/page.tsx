@@ -31,9 +31,7 @@ export default function HomePage() {
       setLoading(true);
       setError(null);
       try {
-        console.log("Fetching from:", `${API_URL}/clusters`);
         const response = await axios.get(`${API_URL}/clusters`);
-        console.log("Response Data:", response.data);
         if (!response.data.songs) {
           throw new Error("No 'songs' array in response");
         }
@@ -58,17 +56,11 @@ export default function HomePage() {
             },
           };
         });
-        console.log("Transformed Songs:", fetchedSongs);
         setSongs(fetchedSongs);
         // Set initial visible songs
         setVisibleSongs(fetchedSongs.slice(0, recordsPerPage));
       } catch (err: any) {
-        console.error("Fetch Error:", err.message);
-        console.error("Full Error Object:", err);
-        setError(`Failed to fetch songs: ${err.message}. Check the server. Falling back to mock data.`);
-        const { allSongs } = await import("@/lib/mock-data");
-        setSongs(allSongs);
-        setVisibleSongs(allSongs.slice(0, recordsPerPage));
+        setError(`Failed to fetch songs: ${err.message}. Check the server.`);
       } finally {
         setLoading(false);
       }
@@ -116,30 +108,9 @@ export default function HomePage() {
     setSelectedSong(song);
   };
 
-  const handleGetRecommendations = async () => {
+  const handleGetRecommendations = () => {
     if (selectedSong) {
-      setLoading(true);
-      setError(null);
-      try {
-        const response = await axios.post(`${API_URL}/recommend`, {
-          track_id: selectedSong.id,
-          n: 5,
-        });
-        const recommendations = response.data.recommendations.map((rec: any) => ({
-          ...rec,
-          similarityScore: rec.similarity || 0,
-          recommendationType: "cluster" as const,
-          clusterId: undefined,
-        }));
-        router.push(
-          `/recommendations?songId=${selectedSong.id}&data=${encodeURIComponent(JSON.stringify(recommendations))}`,
-        );
-      } catch (err) {
-        setError("Failed to fetch recommendations. Check the server.");
-        console.error(err);
-      } finally {
-        setLoading(false);
-      }
+      router.push(`/recommendations?songId=${selectedSong.id}`);
     }
   };
 
@@ -171,8 +142,7 @@ export default function HomePage() {
           <span className="text-primary"> Favorite Song</span>
         </h1>
         <p className="text-xl text-muted-foreground mb-8 text-pretty max-w-2xl mx-auto">
-          Choose any track from our library and get personalized recommendations powered by advanced machine learning
-          algorithms.
+          Choose any track from our library and get personalized recommendations powered by advanced machine learning algorithms.
         </p>
 
         {selectedSong && (
@@ -189,9 +159,9 @@ export default function HomePage() {
                 <p className="text-muted-foreground text-xs">{selectedSong.album}</p>
               </div>
             </div>
-            <Button onClick={handleGetRecommendations} className="w-full mt-4" size="lg" disabled={loading}>
+            <Button onClick={handleGetRecommendations} className="w-full mt-4" size="lg">
               <Sparkles className="h-4 w-4 mr-2" />
-              {loading ? "Loading..." : "Get Recommendations"}
+              Get Recommendations
               <ArrowRight className="h-4 w-4 ml-2" />
             </Button>
           </div>
@@ -236,8 +206,8 @@ export default function HomePage() {
       {/* Load More button */}
       {visibleSongs.length < songs.length && (
         <div className="text-center mt-6">
-          <Button onClick={loadMore} disabled={loading}>
-            {loading ? "Loading..." : "Load More"}
+          <Button onClick={loadMore}>
+            Load More
           </Button>
         </div>
       )}
