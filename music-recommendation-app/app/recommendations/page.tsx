@@ -6,7 +6,7 @@ import axios from "axios"
 import { type Song, type Recommendation } from "@/lib/mock-data"
 import { RecommendationSection } from "@/components/recommendation-section"
 import { Button } from "@/components/ui/button"
-import { ArrowLeft, BarChart3, Play, Pause } from "lucide-react"
+import { ArrowLeft, Play } from "lucide-react"
 import Image from "next/image"
 import { useMusicPlayerContext } from "@/components/music-player-provider"
 
@@ -14,7 +14,7 @@ function RecommendationsContent() {
   const searchParams = useSearchParams()
   const router = useRouter()
   const { play } = useMusicPlayerContext()
-  const songId = searchParams.get("songId")
+  const songId = searchParams.get("songId")?.trim()
 
   const [selectedSong, setSelectedSong] = useState<Song | null>(null)
   const [recommendations, setRecommendations] = useState<{
@@ -25,38 +25,34 @@ function RecommendationsContent() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [comparingSong, setComparingSong] = useState<Recommendation | null>(null)
-  const [isPlaying, setIsPlaying] = useState(false)
-  const [currentSong, setCurrentSong] = useState<Song | Recommendation | null>(null)
 
   useEffect(() => {
     async function fetchSongAndRecommendations() {
       setLoading(true)
       setError(null)
       if (!songId) {
-        console.warn("No songId in URL, redirecting.")
         router.push("/")
         return
       }
 
       try {
-        // Fetch song details from backend
-        const songResponse = await axios.get("http://localhost:8000/clusters")
+        // Fetch all songs to ensure selected song exists
+        const songResponse = await axios.get("http://localhost:8000/clusters?random_sample=false")
         const songs = songResponse.data.songs
-        const song = songs.find((s: any) => String(s.id) === String(songId))
+        const song = songs.find((s: any) => String(s.id).trim() === songId)
+
         if (!song) {
-          console.warn("Song not found for id:", songId)
           setError("Selected song not found in backend data.")
           setLoading(false)
           return
         }
 
-        // Map backend song to Song type
         setSelectedSong({
-          id: song.id,
+          id: String(song.id).trim(),
           name: song.name || "Unknown Title",
           artist: Array.isArray(song.artists) ? song.artists.join(", ") : song.artists || "Unknown Artist",
           album: song.album || "Unknown Album",
-          albumArt: song.album_art || "/placeholder.svg",
+          albumArt: song.album_art && song.album_art !== "" ? song.album_art : "/placeholder.svg",
           previewUrl: song.preview_url || undefined,
           features: song.features || {
             danceability: 0,
@@ -77,10 +73,17 @@ function RecommendationsContent() {
           axios.post("http://localhost:8000/recommend", { track_id: songId, n: 10, mode: "cluster_knn" }),
         ])
 
+        const mapRecommendations = (arr: any[]) =>
+          arr.map((r) => ({
+            ...r,
+            albumArt: r.album_art && r.album_art !== "" ? r.album_art : "/placeholder.svg",
+            previewUrl: r.preview_url || undefined,
+          }))
+
         setRecommendations({
-          cluster: clusterRes.data.recommendations || [],
-          knn: knnRes.data.recommendations || [],
-          hybrid: hybridRes.data.recommendations || [],
+          cluster: mapRecommendations(clusterRes.data.recommendations || []),
+          knn: mapRecommendations(knnRes.data.recommendations || []),
+          hybrid: mapRecommendations(hybridRes.data.recommendations || []),
         })
       } catch (err: any) {
         setError(`Failed to load song or recommendations: ${err.message}`)
@@ -94,7 +97,11 @@ function RecommendationsContent() {
   }, [songId, router])
 
   const handlePlay = (song: Song | Recommendation) => {
-    play(song, [selectedSong!, ...(recommendations ? [...recommendations.cluster, ...recommendations.knn, ...recommendations.hybrid] : [])])
+    if (!selectedSong) return
+    const allRecommendations = recommendations
+      ? [...recommendations.cluster, ...recommendations.knn, ...recommendations.hybrid]
+      : []
+    play(song, [selectedSong, ...allRecommendations])
   }
 
   const handleCompare = (song: Recommendation) => {
@@ -127,7 +134,7 @@ function RecommendationsContent() {
 
   return (
     <div className="container mx-auto px-4 py-8">
-      {/* Header with selected song */}
+      {/* Header */}
       <div className="mb-8">
         <Button variant="ghost" onClick={() => router.push("/")} className="mb-4">
           <ArrowLeft className="h-4 w-4 mr-2" />
@@ -138,7 +145,7 @@ function RecommendationsContent() {
           <div className="flex items-center space-x-6">
             <div className="relative">
               <Image
-                src={selectedSong.albumArt || "/placeholder.svg"}
+                src={selectedSong.albumArt}
                 alt={selectedSong.album}
                 width={120}
                 height={120}
@@ -149,11 +156,7 @@ function RecommendationsContent() {
                 className="absolute bottom-2 right-2 rounded-full w-10 h-10"
                 onClick={() => handlePlay(selectedSong)}
               >
-                {currentSong?.id === selectedSong.id && isPlaying ? (
-                  <Pause className="h-4 w-4" />
-                ) : (
-                  <Play className="h-4 w-4 ml-0.5" />
-                )}
+                <Play className="h-4 w-4 ml-0.5" />
               </Button>
             </div>
 
@@ -163,40 +166,12 @@ function RecommendationsContent() {
               </h1>
               <p className="text-lg text-muted-foreground mb-1">by {selectedSong.artist}</p>
               <p className="text-muted-foreground mb-4">from {selectedSong.album}</p>
-
-              {/* Audio features preview */}
-              <div className="flex items-center space-x-4 text-sm">
-                <div className="flex items-center space-x-2">
-                  <span className="text-muted-foreground">Energy:</span>
-                  <div className="w-16 h-2 bg-muted rounded-full">
-                    <div
-                      className="h-full bg-primary rounded-full"
-                      style={{ width: `${selectedSong.features.energy * 100}%` }}
-                    />
-                  </div>
-                  <span className="text-foreground font-medium">
-                    {Math.round(selectedSong.features.energy * 100)}%
-                  </span>
-                </div>
-                <div className="flex items-center space-x-2">
-                  <span className="text-muted-foreground">Danceability:</span>
-                  <div className="w-16 h-2 bg-muted rounded-full">
-                    <div
-                      className="h-full bg-primary rounded-full"
-                      style={{ width: `${selectedSong.features.danceability * 100}%` }}
-                    />
-                  </div>
-                  <span className="text-foreground font-medium">
-                    {Math.round(selectedSong.features.danceability * 100)}%
-                  </span>
-                </div>
-              </div>
             </div>
           </div>
         </div>
       </div>
 
-      {/* Render all three recommendation sections */}
+      {/* Recommendation Sections */}
       {recommendations && (
         <>
           <RecommendationSection
@@ -208,7 +183,6 @@ function RecommendationsContent() {
             onCompare={handleCompare}
             comparingSong={comparingSong}
           />
-
           <RecommendationSection
             title="KNN-Based Recommendations"
             description="Songs with the most similar audio features"
@@ -218,7 +192,6 @@ function RecommendationsContent() {
             onCompare={handleCompare}
             comparingSong={comparingSong}
           />
-
           <RecommendationSection
             title="Hybrid Recommendations"
             description="Combining cluster and KNN approaches for balanced results"
@@ -230,14 +203,6 @@ function RecommendationsContent() {
           />
         </>
       )}
-
-      {/* Instructions */}
-      <div className="mt-12 bg-muted/50 rounded-lg p-6 text-center">
-        <h3 className="text-lg font-semibold text-foreground mb-2">How to Use</h3>
-        <p className="text-muted-foreground">
-          Click the play button to preview songs, or select "Compare Features" to analyze audio characteristics between your selected song and any recommendation.
-        </p>
-      </div>
     </div>
   )
 }

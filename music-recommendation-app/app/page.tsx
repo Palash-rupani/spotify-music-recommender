@@ -16,34 +16,34 @@ export default function HomePage() {
   const [searchQuery, setSearchQuery] = useState("")
   const [selectedArtists, setSelectedArtists] = useState<string[]>([])
   const [selectedSong, setSelectedSong] = useState<Song | null>(null)
-  const [songs, setSongs] = useState<Song[]>([]) // All loaded records
-  const [visibleSongs, setVisibleSongs] = useState<Song[]>([]) // Subset to display
+  const [songs, setSongs] = useState<Song[]>([])
+  const [visibleSongs, setVisibleSongs] = useState<Song[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [page, setPage] = useState(1)
   const recordsPerPage = 100
 
-  const API_URL = 'http://localhost:8000' // Match your FastAPI server URL
+  const API_URL = "http://localhost:8000"
 
-  // Fetch all clusters on component mount
+  // Fetch 100 random songs for HomePage
   useEffect(() => {
     const fetchClusters = async () => {
-      setLoading(true);
-      setError(null);
+      setLoading(true)
+      setError(null)
       try {
-        const response = await axios.get(`${API_URL}/clusters`);
-        if (!response.data.songs) {
-          throw new Error("No 'songs' array in response");
-        }
-        const fetchedSongs = response.data.songs.map((song: any) => {
-          const artists = Array.isArray(song.artists) ? song.artists.join(", ") : song.artists || "Unknown Artist";
+        const response = await axios.get(`${API_URL}/clusters?random_sample=true&n=${recordsPerPage}`)
+        const fetchedSongs: Song[] = response.data.songs.map((song: any) => {
+          const artists = Array.isArray(song.artists)
+            ? song.artists.join(", ")
+            : song.artists || "Unknown Artist"
+
           return {
-            id: song.id,
+            id: String(song.id).trim(),
             name: song.name || "Unknown Title",
             artist: artists,
-            album: song.album_art ? "Has Album Art" : "No Album",
+            album: song.album || "Unknown Album",
             albumArt: song.album_art || "/placeholder.svg",
-            previewUrl: song.preview_url || undefined,
+            previewUrl: song.preview_url || null,
             features: song.features || {
               danceability: 0,
               energy: 0,
@@ -54,95 +54,89 @@ export default function HomePage() {
               liveness: 0,
               tempo: 0,
             },
-          };
-        });
-        setSongs(fetchedSongs);
-        // Set initial visible songs
-        setVisibleSongs(fetchedSongs.slice(0, recordsPerPage));
+          }
+        })
+
+        setSongs(fetchedSongs)
+        setVisibleSongs(fetchedSongs)
       } catch (err: any) {
-        setError(`Failed to fetch songs: ${err.message}. Check the server.`);
+        setError(`Failed to fetch songs: ${err.message}. Check the server.`)
       } finally {
-        setLoading(false);
+        setLoading(false)
       }
-    };
-    fetchClusters();
-  }, []);
+    }
 
-  // Get unique artists for filter
+    fetchClusters()
+  }, [])
+
+  // Unique artists for filters
   const availableArtists = useMemo(() => {
-    const artists = Array.from(new Set(songs.map((song) => song.artist)));
-    return artists.sort();
-  }, [songs]);
+    const artists = Array.from(new Set(songs.map((song) => song.artist)))
+    return artists.sort()
+  }, [songs])
 
-  // Filter visible songs based on search and artist filters
+  // Filter songs based on search & selected artists
   const filteredSongs = useMemo(() => {
-    let filtered = visibleSongs;
+    let filtered = visibleSongs
 
     if (searchQuery.trim()) {
-      const query = searchQuery.toLowerCase();
+      const query = searchQuery.toLowerCase()
       filtered = filtered.filter(
         (song) =>
           song.name.toLowerCase().includes(query) ||
           song.artist.toLowerCase().includes(query) ||
           song.album.toLowerCase().includes(query),
-      );
+      )
     }
 
     if (selectedArtists.length > 0) {
-      filtered = filtered.filter((song) => selectedArtists.includes(song.artist));
+      filtered = filtered.filter((song) => selectedArtists.includes(song.artist))
     }
 
-    return filtered;
-  }, [searchQuery, selectedArtists, visibleSongs]);
+    return filtered
+  }, [searchQuery, selectedArtists, visibleSongs])
 
   const handleArtistToggle = (artist: string) => {
-    setSelectedArtists((prev) => (prev.includes(artist) ? prev.filter((a) => a !== artist) : [...prev, artist]));
-  };
+    setSelectedArtists((prev) =>
+      prev.includes(artist) ? prev.filter((a) => a !== artist) : [...prev, artist],
+    )
+  }
 
   const handleClearFilters = () => {
-    setSelectedArtists([]);
-    setSearchQuery("");
-  };
+    setSelectedArtists([])
+    setSearchQuery("")
+  }
 
   const handleSongSelect = (song: Song) => {
-    setSelectedSong(song);
-  };
+    setSelectedSong(song)
+  }
 
+  // Navigate to recommendations page
   const handleGetRecommendations = () => {
     if (selectedSong) {
-      router.push(`/recommendations?songId=${selectedSong.id}`);
+      router.push(`/recommendations?songId=${selectedSong.id}`)
     }
-  };
+  }
 
   const handlePlaySong = (song: Song) => {
-    play(song, filteredSongs);
-  };
+    if (song.previewUrl) play(song, filteredSongs)
+  }
 
-  const loadMore = () => {
-    const nextPage = page + 1;
-    const start = (nextPage - 1) * recordsPerPage;
-    const end = start + recordsPerPage;
-    const newVisibleSongs = [
-      ...visibleSongs,
-      ...songs.slice(start, end),
-    ];
-    setVisibleSongs(newVisibleSongs);
-    setPage(nextPage);
-  };
-
-  if (loading) return <div className="container mx-auto px-4 py-8 text-center">Loading...</div>;
-  if (error) return <div className="container mx-auto px-4 py-8 text-center text-red-500">{error}</div>;
+  if (loading)
+    return <div className="container mx-auto px-4 py-8 text-center">Loading...</div>
+  if (error)
+    return <div className="container mx-auto px-4 py-8 text-center text-red-500">{error}</div>
 
   return (
     <div className="container mx-auto px-4 py-8">
-      {/* Hero section */}
       <div className="text-center mb-12">
         <h1 className="text-4xl md:text-6xl font-bold text-foreground mb-4 text-balance">
           Discover Your Next
           <span className="text-primary"> Favorite Song</span>
         </h1>
         <p className="text-xl text-muted-foreground mb-8 text-pretty max-w-2xl mx-auto">
-          Choose any track from our library and get personalized recommendations powered by advanced machine learning algorithms.
+          Choose any track from our library and get personalized recommendations powered
+          by advanced machine learning algorithms.
         </p>
 
         {selectedSong && (
@@ -168,7 +162,6 @@ export default function HomePage() {
         )}
       </div>
 
-      {/* Search and filters */}
       <div className="mb-8">
         <SearchFilters
           searchQuery={searchQuery}
@@ -180,7 +173,6 @@ export default function HomePage() {
         />
       </div>
 
-      {/* Results count */}
       <div className="flex items-center justify-between mb-6">
         <p className="text-muted-foreground">{filteredSongs.length.toLocaleString()} songs available</p>
         {selectedSong && (
@@ -190,7 +182,6 @@ export default function HomePage() {
         )}
       </div>
 
-      {/* Song grid */}
       <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 gap-4">
         {filteredSongs.map((song) => (
           <SongCard
@@ -202,29 +193,6 @@ export default function HomePage() {
           />
         ))}
       </div>
-
-      {/* Load More button */}
-      {visibleSongs.length < songs.length && (
-        <div className="text-center mt-6">
-          <Button onClick={loadMore}>
-            Load More
-          </Button>
-        </div>
-      )}
-
-      {/* Empty state */}
-      {filteredSongs.length === 0 && (
-        <div className="text-center py-12">
-          <div className="w-24 h-24 bg-muted rounded-full flex items-center justify-center mx-auto mb-4">
-            <Search className="h-12 w-12 text-muted-foreground" />
-          </div>
-          <h3 className="text-xl font-semibold text-foreground mb-2">No songs found</h3>
-          <p className="text-muted-foreground mb-4">Try adjusting your search terms or clearing the filters.</p>
-          <Button variant="outline" onClick={handleClearFilters}>
-            Clear Filters
-          </Button>
-        </div>
-      )}
     </div>
-  );
+  )
 }

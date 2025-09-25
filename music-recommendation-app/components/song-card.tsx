@@ -13,6 +13,8 @@ interface SongCardProps {
 }
 
 export function SongCard({ song, onSelect, onPlay, isSelected = false }: SongCardProps) {
+  const isPlayable = !!song.previewUrl
+
   return (
     <div
       className={`group bg-card rounded-lg p-4 border transition-all duration-200 hover:bg-accent cursor-pointer ${
@@ -35,11 +37,17 @@ export function SongCard({ song, onSelect, onPlay, isSelected = false }: SongCar
         <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity duration-200 rounded-md flex items-center justify-center">
           <Button
             size="sm"
-            className="rounded-full w-12 h-12 bg-primary hover:bg-primary/90 text-primary-foreground"
+            className={`rounded-full w-12 h-12 ${
+              isPlayable ? "bg-primary hover:bg-primary/90 text-primary-foreground" : "bg-muted text-muted-foreground cursor-not-allowed"
+            }`}
             onClick={(e) => {
               e.stopPropagation()
-              onPlay?.(song)
+              if (isPlayable) {
+                onPlay?.(song)
+              }
             }}
+            disabled={!isPlayable}
+            title={isPlayable ? "Play song" : "No preview available"}
           >
             <Play className="h-5 w-5 ml-0.5" />
           </Button>
