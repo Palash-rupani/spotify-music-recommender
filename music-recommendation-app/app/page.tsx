@@ -7,7 +7,7 @@ import type { Song } from "@/lib/mock-data"
 import { SongCard } from "@/components/song-card"
 import { SearchFilters } from "@/components/search-filters"
 import { Button } from "@/components/ui/button"
-import { ArrowRight, Sparkles, Search } from "lucide-react"
+import { ArrowRight, Sparkles } from "lucide-react"
 import { useMusicPlayerContext } from "@/components/music-player-provider"
 
 export default function HomePage() {
@@ -16,22 +16,24 @@ export default function HomePage() {
   const [searchQuery, setSearchQuery] = useState("")
   const [selectedArtists, setSelectedArtists] = useState<string[]>([])
   const [selectedSong, setSelectedSong] = useState<Song | null>(null)
-  const [songs, setSongs] = useState<Song[]>([])
-  const [visibleSongs, setVisibleSongs] = useState<Song[]>([])
+
+  const [allSongs, setAllSongs] = useState<Song[]>([])   // full dataset (10k)
+  const [songs, setSongs] = useState<Song[]>([])         // currently visible
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+
   const [page, setPage] = useState(1)
-  const recordsPerPage = 100
+  const recordsPerPage = 500
 
   const API_URL = "http://localhost:8000"
 
-  // Fetch 100 random songs for HomePage
+  // Fetch songs once
   useEffect(() => {
     const fetchClusters = async () => {
       setLoading(true)
       setError(null)
       try {
-        const response = await axios.get(`${API_URL}/clusters?random_sample=true&n=${recordsPerPage}`)
+        const response = await axios.get(`${API_URL}/clusters?random_sample=false`)
         const fetchedSongs: Song[] = response.data.songs.map((song: any) => {
           const artists = Array.isArray(song.artists)
             ? song.artists.join(", ")
@@ -57,8 +59,8 @@ export default function HomePage() {
           }
         })
 
-        setSongs(fetchedSongs)
-        setVisibleSongs(fetchedSongs)
+        setAllSongs(fetchedSongs) // keep full dataset
+        setSongs(fetchedSongs.slice(0, recordsPerPage)) // show first 500
       } catch (err: any) {
         setError(`Failed to fetch songs: ${err.message}. Check the server.`)
       } finally {
@@ -69,15 +71,24 @@ export default function HomePage() {
     fetchClusters()
   }, [])
 
+  // Load more songs
+  const handleLoadMore = () => {
+    const nextPage = page + 1
+    const start = (nextPage - 1) * recordsPerPage
+    const end = start + recordsPerPage
+    setSongs((prev) => [...prev, ...allSongs.slice(start, end)])
+    setPage(nextPage)
+  }
+
   // Unique artists for filters
   const availableArtists = useMemo(() => {
-    const artists = Array.from(new Set(songs.map((song) => song.artist)))
+    const artists = Array.from(new Set(allSongs.map((song) => song.artist)))
     return artists.sort()
-  }, [songs])
+  }, [allSongs])
 
   // Filter songs based on search & selected artists
   const filteredSongs = useMemo(() => {
-    let filtered = visibleSongs
+    let filtered = songs
 
     if (searchQuery.trim()) {
       const query = searchQuery.toLowerCase()
@@ -94,7 +105,7 @@ export default function HomePage() {
     }
 
     return filtered
-  }, [searchQuery, selectedArtists, visibleSongs])
+  }, [searchQuery, selectedArtists, songs])
 
   const handleArtistToggle = (artist: string) => {
     setSelectedArtists((prev) =>
@@ -111,7 +122,6 @@ export default function HomePage() {
     setSelectedSong(song)
   }
 
-  // Navigate to recommendations page
   const handleGetRecommendations = () => {
     if (selectedSong) {
       router.push(`/recommendations?songId=${selectedSong.id}`)
@@ -174,7 +184,9 @@ export default function HomePage() {
       </div>
 
       <div className="flex items-center justify-between mb-6">
-        <p className="text-muted-foreground">{filteredSongs.length.toLocaleString()} songs available</p>
+        <p className="text-muted-foreground">
+          Showing {songs.length.toLocaleString()} of {allSongs.length.toLocaleString()} songs
+        </p>
         {selectedSong && (
           <Button variant="outline" onClick={() => setSelectedSong(null)}>
             Clear Selection
@@ -193,6 +205,15 @@ export default function HomePage() {
           />
         ))}
       </div>
+
+      {/* Load More button */}
+      {songs.length < allSongs.length && (
+        <div className="flex justify-center mt-8">
+          <Button onClick={handleLoadMore} variant="secondary">
+            Load More
+          </Button>
+        </div>
+      )}
     </div>
   )
 }

@@ -104,9 +104,12 @@ function RecommendationsContent() {
     play(song, [selectedSong, ...allRecommendations])
   }
 
-  const handleCompare = (song: Recommendation) => {
-    setComparingSong(comparingSong?.id === song.id ? null : song)
-  }
+const handleCompare = (song: Recommendation) => {
+  if (!selectedSong) return
+  router.push(`/compare?songId=${selectedSong.id}&compareId=${song.id}`)
+}
+
+
 
   if (loading) {
     return (

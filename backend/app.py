@@ -142,3 +142,28 @@ def recommend(request: RecommendationRequest):
         })
 
     return {"recommendations": sanitize_json(recommendations)}
+@app.get("/song/{track_id}")
+def get_song(track_id: str):
+    """Fetch metadata + features for a single song by track_id"""
+    row = df[df["id"] == track_id]
+    if row.empty:
+        raise HTTPException(status_code=404, detail="Track not found")
+
+    row = row.iloc[0]
+
+    feature_cols = [
+        "danceability", "energy", "valence", "speechiness",
+        "instrumentalness", "acousticness", "liveness", "tempo"
+    ]
+
+    song = {
+        "id": row.get("id"),
+        "name": row.get("name"),
+        "artist": row.get("artists"),
+        "album_art": row.get("album_art"),
+        "preview_url": row.get("preview_url"),
+        "features": {col: row.get(col, 0) for col in feature_cols if col in row}
+    }
+
+    return sanitize_json(song)
+

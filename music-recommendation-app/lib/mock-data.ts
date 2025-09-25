@@ -14,6 +14,7 @@ export interface Song {
     acousticness: number
     liveness: number
     tempo: number
+    duration_ms?: number
   }
 }
 
